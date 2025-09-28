@@ -80,7 +80,7 @@ class ventcontrol(commands.Cog):
         repo_url = "https://github.com/Vect0r2/manuel_bot"
         embed = discord.Embed(
             title="VentControl Repository",
-            description=f"Check out the source code: [{repo_url}]({repo_url})",
+            description="check out the repo here: %s" % repo_url,
             color=discord.Color.blue()
         )
         embed.set_footer(text=f"Version {__version__} by {__author__}")
