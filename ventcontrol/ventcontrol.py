@@ -74,6 +74,18 @@ class ventcontrol(commands.Cog):
             
         await ctx.send(f"Auto-purge stopped for {channel.mention}.")
 
+    @commands.command(name="ventrepo")
+    async def vent_repo(self, ctx):
+        """Get the repository link for this cog"""
+        repo_url = "https://github.com/Vect0r2/manuel_bot"
+        embed = discord.Embed(
+            title="VentControl Repository",
+            description=f"Check out the source code: [{repo_url}]({repo_url})",
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Version {__version__} by {__author__}")
+        await ctx.send(embed=embed)
+
     async def _purge_loop(self, channel: discord.TextChannel, interval_minutes: int):
         """Background task that purges messages at intervals"""
         while True:
