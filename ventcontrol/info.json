@@ -1,0 +1,12 @@
+{
+    "author": ["Vect0r"],
+    "name": "ventcontrol",
+    "short": "Clears a channel of messages every X minutes.",
+    "description": "An automated message purging system. Features configurable intervals, pause/resume functionality.",
+    "requirements": [],
+    "hidden": false,
+    "install_msg": "Thanks for installing ventcontrol! Use `[p]ventconfig add #channel 30` to set up automatic message purging every 30 minutes. Type `[p]help vent` for a full list of commands.",
+    "min_bot_version": "3.4.0",
+    "max_bot_version": "0.0.0",
+    "type": "COG"
+}
