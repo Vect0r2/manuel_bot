@@ -14,7 +14,9 @@ class ventcontrol(commands.Cog):
         self.config = Config.get_conf(self, identifier=6782154929, force_registration=True)
         
         default_guild = {
-            "purge_channels": {}  # {channel_id: interval_minutes}
+    "purge_channels": {},
+    "next_purge_times": {},  # {channel_id: timestamp}
+    "countdown_messages": {}  # {channel_id: message_id}
         }
         self.config.register_guild(**default_guild)
         
@@ -58,21 +60,22 @@ class ventcontrol(commands.Cog):
     @commands.guild_only()
     @commands.is_owner()
     async def stop_purge(self, ctx, channel: discord.TextChannel):
-        """Stop automatic purging for a channel"""
+        # ... existing code ...
+        
+        # Remove countdown message
         guild_config = self.config.guild(ctx.guild)
-        purge_channels = await guild_config.purge_channels()
+        countdown_messages = await guild_config.countdown_messages()
         
-        # Remove from config
-        if str(channel.id) in purge_channels:
-            del purge_channels[str(channel.id)]
-            await guild_config.purge_channels.set(purge_channels)
-        
-        # Stop task
-        if channel.id in self.purge_tasks:
-            self.purge_tasks[channel.id].cancel()
-            del self.purge_tasks[channel.id]
+        if str(channel.id) in countdown_messages:
+            try:
+                message_id = countdown_messages[str(channel.id)]
+                message = await channel.fetch_message(message_id)
+                await message.delete()
+            except discord.NotFound:
+                pass
             
-        await ctx.send(f"Auto-purge stopped for {channel.mention}.")
+            del countdown_messages[str(channel.id)]
+            await guild_config.countdown_messages.set(countdown_messages)
 
     @commands.command(name="ventrepo")
     async def vent_repo(self, ctx):
@@ -88,37 +91,94 @@ class ventcontrol(commands.Cog):
 
     async def _purge_loop(self, channel: discord.TextChannel, interval_minutes: int):
         """Background task that purges messages at intervals"""
+        import time
+        
         while True:
             try:
-                await asyncio.sleep(interval_minutes * 60)  # Convert minutes to seconds
+                # Calculate next purge time
+                next_purge_time = time.time() + (interval_minutes * 60)
                 
-                # Check if we still have permissions
+                # Store next purge time
+                guild_config = self.config.guild(channel.guild)
+                next_purge_times = await guild_config.next_purge_times()
+                next_purge_times[str(channel.id)] = next_purge_time
+                await guild_config.next_purge_times.set(next_purge_times)
+                
+                # Create initial countdown message
+                await self._update_countdown_message(channel, next_purge_time)
+                
+                # Update countdown every minute
+                for i in range(interval_minutes):
+                    await asyncio.sleep(60)  # Wait 1 minute
+                    current_time = time.time()
+                    if current_time < next_purge_time:  # Still time left
+                        await self._update_countdown_message(channel, next_purge_time)
+                
+                # Check permissions before purging
                 if not channel.permissions_for(channel.guild.me).manage_messages:
                     break
                 
-                # Purge all messages
+                # Purge all messages (including the countdown)
                 await channel.purge(limit=None)
+                
             except discord.HTTPException:
                 await asyncio.sleep(60)
                 continue
             except asyncio.CancelledError:
                 break
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        """Restore purge tasks when bot starts"""
-        await self.bot.wait_until_ready()
-        
-        for guild in self.bot.guilds:
-            guild_config = self.config.guild(guild)
-            purge_channels = await guild_config.purge_channels()
+        @commands.Cog.listener()
+        async def on_ready(self):
+            """Restore purge tasks when bot starts"""
+            await self.bot.wait_until_ready()
             
-            for channel_id_str, interval in purge_channels.items():
-                channel_id = int(channel_id_str)
-                channel = guild.get_channel(channel_id)
+            for guild in self.bot.guilds:
+                guild_config = self.config.guild(guild)
+                purge_channels = await guild_config.purge_channels()
                 
-                if channel and channel.permissions_for(guild.me).manage_messages:
-                    # Start purge task
-                    task = asyncio.create_task(self._purge_loop(channel, interval))
-                    self.purge_tasks[channel_id] = task
+                for channel_id_str, interval in purge_channels.items():
+                    channel_id = int(channel_id_str)
+                    channel = guild.get_channel(channel_id)
+                    
+                    if channel and channel.permissions_for(guild.me).manage_messages:
+                        # Start purge task
+                        task = asyncio.create_task(self._purge_loop(channel, interval))
+                        self.purge_tasks[channel_id] = task
 
+    async def _update_countdown_message(self, channel: discord.TextChannel, next_purge_time: float):
+        """Create or update the pinned countdown message"""
+        guild_config = self.config.guild(channel.guild)
+        countdown_messages = await guild_config.countdown_messages()
+        
+        # Calculate time remaining
+        import datetime
+        next_purge = datetime.datetime.fromtimestamp(next_purge_time)
+        now = datetime.datetime.now()
+        time_left = next_purge - now
+        
+        # Format the message
+        if time_left.total_seconds() > 0:
+            minutes_left = int(time_left.total_seconds() / 60)
+            hours_left = minutes_left // 60
+            mins_left = minutes_left % 60
+            
+            if hours_left > 0:
+                time_str = f"{hours_left}h {mins_left}m"
+            else:
+                time_str = f"{mins_left}m"
+                
+            embed = discord.Embed(
+                title="Auto-Purge Active",
+                description=f"Next message wipe in: **{time_str}**",
+                color=discord.Color.orange()
+            )
+        try:
+            message = await channel.send(embed=embed)
+            await message.pin()
+            
+            # Store message ID
+            countdown_messages[str(channel.id)] = message.id
+            await guild_config.countdown_messages.set(countdown_messages)
+        except discord.Forbidden:
+            # No permission to pin
+            pass
