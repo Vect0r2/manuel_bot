@@ -1,0 +1,10 @@
+{
+    "author": ["Vect0r"],
+    "install_msg": "Thanks for installing VidChoose! Set your YouTube API key with `[p]vidchoose setapi` first.",
+    "name": "VidChoose",
+    "short": "YouTube video selector with weighted random selection",
+    "description": "Automatically posts YouTube videos from added channels with weighted random selection and repeat avoidance.",
+    "tags": ["youtube", "videos"],
+    "requirements": ["aiohttp"],
+    "end_user_data_statement": "This cog stores YouTube channel/video IDs and user preferences for video selection. No personal user data is stored."
+}
