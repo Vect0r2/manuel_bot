@@ -409,16 +409,8 @@ class VidChoose(commands.Cog):
         # Post the video
         post_channel = guild.get_channel(post_channel_id)
         if post_channel:
-            if video_info:
-                embed = discord.Embed(
-                    title=video_info["title"],
-                    url=f"https://www.youtube.com/watch?v={video_id}",
-                    color=discord.Color.red()
-                )
-                embed.set_author(name=channel_name)
-                await post_channel.send(embed=embed)
-            else:
-                await post_channel.send(f"https://www.youtube.com/watch?v={video_id}")
+            # Send just the URL so Discord shows the video preview
+            await post_channel.send(f"https://www.youtube.com/watch?v={video_id}")
             
             # Update history and timestamp
             await self._update_history(guild.id, channel_id, video_id)
@@ -699,23 +691,11 @@ class VidChoose(commands.Cog):
             
             post_channel = guild.get_channel(post_channel_id)
             if post_channel:
-                video_info = await self._fetch_video_info(video_id)
-                channels = await guild_config.channels()
-                channel_name = channels.get(channel_id, {}).get("name", "Unknown")
-                
-                if video_info:
-                    embed = discord.Embed(
-                        title=video_info["title"],
-                        url=f"https://www.youtube.com/watch?v={video_id}",
-                        color=discord.Color.red()
-                    )
-                    embed.set_author(name=channel_name)
-                    await post_channel.send(embed=embed)
-                else:
-                    await post_channel.send(f"https://www.youtube.com/watch?v={video_id}")
+                # Send just the URL so Discord shows the video preview
+                await post_channel.send(f"https://www.youtube.com/watch?v={video_id}")
                 
                 await self._update_history(guild.id, channel_id, video_id)
-                await ctx.send(" Video posted!")
+                await ctx.send("✅ Video posted!")
     
     @vidchoose.command(name="enable")
     async def vidchoose_enable(self, ctx):
