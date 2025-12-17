@@ -681,25 +681,58 @@ class VidChoose(commands.Cog):
             
             removed = False
             
-            # Remove channel
-            if identifier in channels:
+            # Try to resolve identifier as a channel URL/handle/ID
+            resolved_channel_id = await self._extract_channel_id(identifier)
+            if resolved_channel_id and resolved_channel_id in channels:
+                # delete channel entry
+                async with guild_config.channels() as ch_data:
+                    if resolved_channel_id in ch_data:
+                        del ch_data[resolved_channel_id]
+                # delete videos belonging to that channel
+                async with guild_config.videos() as vid_data:
+                    to_delete = [vid for vid, dat in vid_data.items() if dat.get("channel_id") == resolved_channel_id]
+                    for vid in to_delete:
+                        if vid in vid_data:
+                            del vid_data[vid]
+                removed = True
+
+            # Direct key match for channel id (if user passed raw key)
+            if not removed and identifier in channels:
                 async with guild_config.channels() as ch_data:
                     del ch_data[identifier]
                 removed = True
-            
-            # Remove video
+
+            # Direct video id removal
             if identifier in videos:
                 async with guild_config.videos() as vid_data:
-                    del vid_data[identifier]
+                    if identifier in vid_data:
+                        del vid_data[identifier]
                 removed = True
-            
-            # Remove single video channel
+
+            # single_video channel id (user may pass raw video id)
             single_id = f"single_{identifier}"
-            if single_id in channels:
+            if not removed and single_id in channels:
                 async with guild_config.channels() as ch_data:
                     del ch_data[single_id]
                 removed = True
-            
+
+            # Try matching by stored channel name (case-insensitive)
+            if not removed:
+                for cid, data in channels.items():
+                    name = data.get("name", "")
+                    if name and name.lower() == identifier.lower():
+                        async with guild_config.channels() as ch_data:
+                            if cid in ch_data:
+                                del ch_data[cid]
+                        # also remove associated videos
+                        async with guild_config.videos() as vid_data:
+                            to_delete = [vid for vid, dat in vid_data.items() if dat.get("channel_id") == cid]
+                            for vid in to_delete:
+                                if vid in vid_data:
+                                    del vid_data[vid]
+                        removed = True
+                        break
+
             if removed:
                 await ctx.send("Removed successfully")
             else:
