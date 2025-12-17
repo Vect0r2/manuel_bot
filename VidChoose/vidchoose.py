@@ -469,14 +469,14 @@ class VidChoose(commands.Cog):
     async def vidchoose_setapi(self, ctx, api_key: str):
         """Set YouTube API key (bot owner only)"""
         await self.config.youtube_api_key.set(api_key)
-        await ctx.send(" YouTube API key set!")
+        await ctx.send("YouTube API key set!")
     
     @vidchoose.command(name="addchannel")
     async def vidchoose_addchannel(self, ctx, channel_url: str, weight: float = 1.0):
         """Add a YouTube channel and all its videos"""
         channel_id = await self._extract_channel_id(channel_url)
         if not channel_id:
-            await ctx.send(" Could not extract channel ID from URL")
+            await ctx.send("Could not extract channel ID from URL")
             return
         
         async with ctx.typing():
@@ -484,13 +484,13 @@ class VidChoose(commands.Cog):
                 # Get channel info
                 channel_info = await self._fetch_channel_info(channel_id)
                 if not channel_info:
-                    await ctx.send(" Channel not found or API key not set")
+                    await ctx.send("Channel not found or API key not set")
                     return
                 
                 # Get videos (will filter shorts based on guild settings)
                 videos = await self._fetch_channel_videos(channel_info["uploads_playlist"], 100, ctx.guild.id)
                 if not videos:
-                    await ctx.send(" No videos found in channel (or all videos are shorts and shorts are disabled)")
+                    await ctx.send("No videos found in channel (or all videos are shorts and shorts are disabled)")
                     return
                 
                 # Save channel
@@ -530,14 +530,14 @@ class VidChoose(commands.Cog):
         """Add a single video"""
         video_id = await self._extract_video_id(video_url)
         if not video_id:
-            await ctx.send(" Could not extract video ID from URL")
+            await ctx.send("Could not extract video ID from URL")
             return
         
         async with ctx.typing():
             try:
                 video_info = await self._fetch_video_info(video_id)
                 if not video_info:
-                    await ctx.send(" Video not found or API key not set")
+                    await ctx.send("Video not found or API key not set")
                     return
                 
                 # Generate unique ID for single video "channel"
@@ -609,37 +609,37 @@ class VidChoose(commands.Cog):
                 if data.get("name", "").lower() == identifier.lower():
                     async with guild_config.channels() as ch_data:
                         ch_data[cid]["weight"] = weight
-                    await ctx.send(f" Set weight for **{data['name']}** to **{weight}**")
+                    await ctx.send(f"Set weight for **{data['name']}** to **{weight}**")
                     return
             
-            await ctx.send(" Channel/video not found")
+            await ctx.send("Channel/video not found")
     
     @vidchoose.command(name="setchannel")
     async def vidchoose_setchannel(self, ctx, channel: discord.TextChannel):
         """Set the channel where videos will be posted"""
         await self.config.guild(ctx.guild).post_channel.set(channel.id)
-        await ctx.send(f" Videos will be posted in {channel.mention}")
+        await ctx.send(f"Videos will be posted in {channel.mention}")
     
     @vidchoose.command(name="setinterval")
     async def vidchoose_setinterval(self, ctx, minutes: int):
         """Set minutes between automatic posts"""
         if minutes < 1:
-            await ctx.send(" Interval must be at least 1 minute")
+            await ctx.send("Interval must be at least 1 minute")
             return
         
         await self.config.guild(ctx.guild).post_interval.set(minutes)
-        await ctx.send(f" Post interval set to {minutes} minutes")
+        await ctx.send(f"Post interval set to {minutes} minutes")
     
     @vidchoose.command(name="sethistory")
     async def vidchoose_sethistory(self, ctx, channels: int, videos: int):
         """Set how many channels/videos to remember"""
         if channels < 1 or videos < 1:
-            await ctx.send(" History sizes must be at least 1")
+            await ctx.send("History sizes must be at least 1")
             return
         
         await self.config.guild(ctx.guild).channel_history.set(channels)
         await self.config.guild(ctx.guild).video_history.set(videos)
-        await ctx.send(f" History: {channels} channels, {videos} videos")
+        await ctx.send(f"History: {channels} channels, {videos} videos")
     
     @vidchoose.command(name="list")
     async def vidchoose_list(self, ctx):
@@ -647,11 +647,11 @@ class VidChoose(commands.Cog):
         channels = await self.config.guild(ctx.guild).channels()
         
         if not channels:
-            await ctx.send(" No channels added yet")
+            await ctx.send("No channels added yet")
             return
         
         embed = discord.Embed(
-            title=" Video Channels",
+            title="Video Channels",
             color=discord.Color.blue()
         )
         
@@ -661,9 +661,9 @@ class VidChoose(commands.Cog):
             video_count = len(data.get("video_ids", []))
             is_single = data.get("is_single", False)
             
-            prefix = " " if is_single else " "
+            prefix = "Video:" if is_single else "Channel:"
             embed.add_field(
-                name=f"{prefix}{name}",
+                name=f"{prefix} {name}",
                 value=f"Weight: {weight} | Videos: {video_count}",
                 inline=False
             )
@@ -701,9 +701,9 @@ class VidChoose(commands.Cog):
                 removed = True
             
             if removed:
-                await ctx.send(" Removed successfully")
+                await ctx.send("Removed successfully")
             else:
-                await ctx.send(" Channel/video not found")
+                await ctx.send("Channel/video not found")
     
     @vidchoose.command(name="force")
     async def vidchoose_force(self, ctx):
@@ -713,18 +713,18 @@ class VidChoose(commands.Cog):
         
         post_channel_id = await guild_config.post_channel()
         if not post_channel_id:
-            await ctx.send(" No posting channel set. Use `[p]vidchoose setchannel`")
+            await ctx.send("No posting channel set. Use `[p]vidchoose setchannel`")
             return
         
         async with ctx.typing():
             channel_id = await self._weighted_choice(guild.id)
             if not channel_id:
-                await ctx.send(" No channels available")
+                await ctx.send("No channels available")
                 return
             
             video_id = await self._select_video_from_channel(guild.id, channel_id)
             if not video_id:
-                await ctx.send(" No videos available")
+                await ctx.send("No videos available")
                 return
             
             post_channel = guild.get_channel(post_channel_id)
@@ -733,19 +733,19 @@ class VidChoose(commands.Cog):
                 await post_channel.send(f"https://www.youtube.com/watch?v={video_id}")
                 
                 await self._update_history(guild.id, channel_id, video_id)
-                await ctx.send("✅ Video posted!")
+                await ctx.send("Video posted!")
     
     @vidchoose.command(name="enable")
     async def vidchoose_enable(self, ctx):
         """Enable automatic posting"""
         await self.config.guild(ctx.guild).enabled.set(True)
-        await ctx.send(" Automatic posting enabled")
+        await ctx.send("Automatic posting enabled")
     
     @vidchoose.command(name="disable")
     async def vidchoose_disable(self, ctx):
         """Disable automatic posting"""
         await self.config.guild(ctx.guild).enabled.set(False)
-        await ctx.send(" Automatic posting disabled")
+        await ctx.send("Automatic posting disabled")
     
     @vidchoose.command(name="shorts")
     async def vidchoose_shorts(self, ctx, enabled: bool):
@@ -757,9 +757,9 @@ class VidChoose(commands.Cog):
         """
         await self.config.guild(ctx.guild).shorts_enabled.set(enabled)
         if enabled:
-            await ctx.send("✅ YouTube Shorts are now **enabled** and will be included in video selection")
+            await ctx.send("YouTube Shorts are now **enabled** and will be included in video selection")
         else:
-            await ctx.send("🚫 YouTube Shorts are now **disabled** and will be filtered out")
+            await ctx.send("YouTube Shorts are now **disabled** and will be filtered out")
     
     @vidchoose.command(name="status")
     async def vidchoose_status(self, ctx):
@@ -776,7 +776,7 @@ class VidChoose(commands.Cog):
         videos = await guild_config.videos()
         
         embed = discord.Embed(
-            title="📺 VidChoose Status",
+            title="VidChoose Status",
             color=discord.Color.blue()
         )
         
@@ -788,10 +788,10 @@ class VidChoose(commands.Cog):
         
         embed.add_field(name="Posting Channel", value=channel_name, inline=True)
         embed.add_field(name="Post Interval", value=f"{post_interval} min", inline=True)
-        embed.add_field(name="Auto Posting", value="✅ Enabled" if enabled else "❌ Disabled", inline=True)
+        embed.add_field(name="Auto Posting", value="Enabled" if enabled else "Disabled", inline=True)
         embed.add_field(name="Channel History", value=str(channel_history), inline=True)
         embed.add_field(name="Video History", value=str(video_history), inline=True)
-        embed.add_field(name="YouTube Shorts", value="✅ Enabled" if shorts_enabled else "🚫 Disabled", inline=True)
+        embed.add_field(name="YouTube Shorts", value="Enabled" if shorts_enabled else "Disabled", inline=True)
         embed.add_field(name="Total Channels", value=str(len(channels)), inline=True)
         embed.add_field(name="Total Videos", value=str(len(videos)), inline=True)
         
@@ -807,7 +807,7 @@ class VidChoose(commands.Cog):
     async def vidchoose_testweights(self, ctx, trials: int = 100):
         """Test weighted selection distribution"""
         if trials < 10 or trials > 1000:
-            await ctx.send(" Trials must be between 10 and 1000")
+            await ctx.send("Trials must be between 10 and 1000")
             return
         
         channels = await self.config.guild(ctx.guild).channels()
