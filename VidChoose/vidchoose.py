@@ -33,7 +33,8 @@ class VidChoose(commands.Cog):
             "channels": {},
             "videos": {},
             "last_post_time": 0,
-            "enabled": True
+            "enabled": True,
+            "shorts_enabled": False
         }
         
         self.config.register_global(**default_global)
@@ -186,11 +187,16 @@ class VidChoose(commands.Cog):
         except Exception:
             return None
     
-    async def _fetch_channel_videos(self, playlist_id: str, max_results: int = 50) -> List[str]:
-        """Fetch videos from a playlist (channel uploads)"""
+    async def _fetch_channel_videos(self, playlist_id: str, max_results: int = 50, guild_id: int = None) -> List[str]:
+        """Fetch videos from a playlist (channel uploads), optionally filtering shorts"""
         api_key = await self.config.youtube_api_key()
         if not api_key:
             return []
+        
+        # Check if shorts are enabled for this guild
+        shorts_enabled = True
+        if guild_id:
+            shorts_enabled = await self.config.guild_from_id(guild_id).shorts_enabled()
         
         video_ids = []
         page_token = None
@@ -216,7 +222,15 @@ class VidChoose(commands.Cog):
                         data = await response.json()
                         
                         for item in data.get("items", []):
-                            video_ids.append(item["contentDetails"]["videoId"])
+                            video_id = item["contentDetails"]["videoId"]
+                            
+                            # If shorts not enabled, check if this is a short
+                            if not shorts_enabled:
+                                video_info = await self._fetch_video_info(video_id)
+                                if video_info and self._is_short(video_info["duration"]):
+                                    continue  # Skip this short
+                            
+                            video_ids.append(video_id)
                         
                         page_token = data.get("nextPageToken")
                         if not page_token:
@@ -227,14 +241,14 @@ class VidChoose(commands.Cog):
         return video_ids[:max_results]
     
     async def _fetch_video_info(self, video_id: str) -> Optional[Dict]:
-        """Fetch video title and channel ID"""
+        """Fetch video title, channel ID, and duration"""
         api_key = await self.config.youtube_api_key()
         if not api_key:
             return None
         
         url = (
             f"https://www.googleapis.com/youtube/v3/videos"
-            f"?part=snippet"
+            f"?part=snippet,contentDetails"
             f"&id={video_id}"
             f"&key={api_key}"
         )
@@ -250,14 +264,38 @@ class VidChoose(commands.Cog):
                     if not data.get("items"):
                         return None
                     
-                    item = data["items"][0]["snippet"]
+                    item = data["items"][0]
+                    snippet = item["snippet"]
+                    duration = item["contentDetails"]["duration"]
+                    
                     return {
-                        "title": item["title"],
-                        "channel_id": item["channelId"],
-                        "channel_title": item.get("channelTitle", "Unknown")
+                        "title": snippet["title"],
+                        "channel_id": snippet["channelId"],
+                        "channel_title": snippet.get("channelTitle", "Unknown"),
+                        "duration": duration
                     }
         except Exception:
             return None
+    
+    def _is_short(self, duration_iso: str) -> bool:
+        """Check if video is a YouTube Short (duration <= 60 seconds)"""
+        try:
+            # Parse ISO 8601 duration format (e.g., PT1M30S = 1 minute 30 seconds)
+            import re
+            match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration_iso)
+            if not match:
+                return False
+            
+            hours = int(match.group(1) or 0)
+            minutes = int(match.group(2) or 0)
+            seconds = int(match.group(3) or 0)
+            
+            total_seconds = hours * 3600 + minutes * 60 + seconds
+            
+            # YouTube Shorts are 60 seconds or less
+            return total_seconds <= 60
+        except Exception:
+            return False
     
     # ====================
     # WEIGHTED SELECTION
@@ -449,10 +487,10 @@ class VidChoose(commands.Cog):
                     await ctx.send(" Channel not found or API key not set")
                     return
                 
-                # Get videos
-                videos = await self._fetch_channel_videos(channel_info["uploads_playlist"], 100)
+                # Get videos (will filter shorts based on guild settings)
+                videos = await self._fetch_channel_videos(channel_info["uploads_playlist"], 100, ctx.guild.id)
                 if not videos:
-                    await ctx.send(" No videos found in channel")
+                    await ctx.send(" No videos found in channel (or all videos are shorts and shorts are disabled)")
                     return
                 
                 # Save channel
@@ -709,6 +747,20 @@ class VidChoose(commands.Cog):
         await self.config.guild(ctx.guild).enabled.set(False)
         await ctx.send(" Automatic posting disabled")
     
+    @vidchoose.command(name="shorts")
+    async def vidchoose_shorts(self, ctx, enabled: bool):
+        """Enable or disable YouTube Shorts
+        
+        Usage: 
+        - !vidchoose shorts true  (include shorts)
+        - !vidchoose shorts false (exclude shorts)
+        """
+        await self.config.guild(ctx.guild).shorts_enabled.set(enabled)
+        if enabled:
+            await ctx.send("✅ YouTube Shorts are now **enabled** and will be included in video selection")
+        else:
+            await ctx.send("🚫 YouTube Shorts are now **disabled** and will be filtered out")
+    
     @vidchoose.command(name="status")
     async def vidchoose_status(self, ctx):
         """Show current configuration"""
@@ -719,11 +771,12 @@ class VidChoose(commands.Cog):
         channel_history = await guild_config.channel_history()
         video_history = await guild_config.video_history()
         enabled = await guild_config.enabled()
+        shorts_enabled = await guild_config.shorts_enabled()
         channels = await guild_config.channels()
         videos = await guild_config.videos()
         
         embed = discord.Embed(
-            title=" VidChoose Status",
+            title="📺 VidChoose Status",
             color=discord.Color.blue()
         )
         
@@ -735,9 +788,10 @@ class VidChoose(commands.Cog):
         
         embed.add_field(name="Posting Channel", value=channel_name, inline=True)
         embed.add_field(name="Post Interval", value=f"{post_interval} min", inline=True)
-        embed.add_field(name="Auto Posting", value=" Enabled" if enabled else " Disabled", inline=True)
+        embed.add_field(name="Auto Posting", value="✅ Enabled" if enabled else "❌ Disabled", inline=True)
         embed.add_field(name="Channel History", value=str(channel_history), inline=True)
         embed.add_field(name="Video History", value=str(video_history), inline=True)
+        embed.add_field(name="YouTube Shorts", value="✅ Enabled" if shorts_enabled else "🚫 Disabled", inline=True)
         embed.add_field(name="Total Channels", value=str(len(channels)), inline=True)
         embed.add_field(name="Total Videos", value=str(len(videos)), inline=True)
         
