@@ -50,22 +50,91 @@ class VidChoose(commands.Cog):
     
     async def _extract_channel_id(self, url_or_id: str) -> Optional[str]:
         """Extract channel ID from various URL formats"""
-        patterns = [
-            r"^UC[a-zA-Z0-9_-]{22}$",
-            r"youtube\.com/channel/([a-zA-Z0-9_-]+)",
-            r"youtube\.com/c/([a-zA-Z0-9_-]+)",
-            r"youtube\.com/user/([a-zA-Z0-9_-]+)",
-            r"youtube\.com/@([a-zA-Z0-9_-]+)"
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, url_or_id, re.IGNORECASE)
-            if match:
-                extracted = match.group(1) if match.groups() else match.group(0)
-                return extracted
-        
-        if re.match(r"^[a-zA-Z0-9_-]+$", url_or_id):
+        # Check if already a valid channel ID (starts with UC and is 24 chars)
+        if re.match(r"^UC[a-zA-Z0-9_-]{22}$", url_or_id):
             return url_or_id
+        
+        # Check for channel URL
+        channel_match = re.search(r"youtube\.com/channel/([a-zA-Z0-9_-]+)", url_or_id, re.IGNORECASE)
+        if channel_match:
+            return channel_match.group(1)
+        
+        # Check for handle (@username)
+        handle_match = re.search(r"youtube\.com/@([a-zA-Z0-9_-]+)", url_or_id, re.IGNORECASE)
+        if handle_match:
+            handle = handle_match.group(1)
+            # Resolve handle to channel ID using API
+            return await self._resolve_handle_to_channel_id(handle)
+        
+        # Check for custom URL (/c/ or /user/)
+        custom_match = re.search(r"youtube\.com/(?:c|user)/([a-zA-Z0-9_-]+)", url_or_id, re.IGNORECASE)
+        if custom_match:
+            custom_name = custom_match.group(1)
+            # Try to resolve custom URL to channel ID
+            return await self._resolve_custom_url_to_channel_id(custom_name)
+        
+        # If it's just a plain string, try to resolve it
+        if re.match(r"^[a-zA-Z0-9_-]+$", url_or_id):
+            # Could be a handle, username, or custom URL - try to resolve
+            return await self._resolve_custom_url_to_channel_id(url_or_id)
+        
+        return None
+    
+    async def _resolve_handle_to_channel_id(self, handle: str) -> Optional[str]:
+        """Resolve a YouTube handle (@username) to channel ID"""
+        api_key = await self.config.youtube_api_key()
+        if not api_key:
+            return None
+        
+        # YouTube API search by handle
+        url = (
+            f"https://www.googleapis.com/youtube/v3/channels"
+            f"?part=id"
+            f"&forHandle={handle}"
+            f"&key={api_key}"
+        )
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        return None
+                    
+                    data = await response.json()
+                    if data.get("items"):
+                        return data["items"][0]["id"]
+        except Exception:
+            pass
+        
+        return None
+    
+    async def _resolve_custom_url_to_channel_id(self, custom_url: str) -> Optional[str]:
+        """Resolve a custom URL or username to channel ID via search"""
+        api_key = await self.config.youtube_api_key()
+        if not api_key:
+            return None
+        
+        # Try search API
+        url = (
+            f"https://www.googleapis.com/youtube/v3/search"
+            f"?part=snippet"
+            f"&type=channel"
+            f"&q={custom_url}"
+            f"&maxResults=1"
+            f"&key={api_key}"
+        )
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        return None
+                    
+                    data = await response.json()
+                    if data.get("items"):
+                        return data["items"][0]["snippet"]["channelId"]
+        except Exception:
+            pass
         
         return None
     
